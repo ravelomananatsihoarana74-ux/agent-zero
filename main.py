@@ -8,14 +8,19 @@ logger = logging.getLogger("AgentZero")
 
 class AgentZero:
     def __init__(self):
+        # Chargement des secrets depuis l'environnement
         self.github_token = os.getenv("GITHUB_TOKEN")
         self.groq_api_key = os.getenv("GROQ_API_KEY")
         self.telegram_token = os.getenv("TELEGRAM_TOKEN")
         self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
         self.kaggle_username = os.getenv("KAGGLE_USERNAME")
         self.kaggle_key = os.getenv("KAGGLE_KEY")
+        self.hf_token = os.getenv("HUGGINGFACE_TOKEN")
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        self.supabase_url = os.getenv("SUPABASE_URL")
+        self.supabase_key = os.getenv("SUPABASE_KEY")
         
-        logger.info("Agent Zéro initialisé.")
+        logger.info("Agent Zéro initialisé avec tous les services.")
 
     def notify_telegram(self, message: str):
         """Envoie une notification sur Telegram."""
@@ -28,15 +33,37 @@ class AgentZero:
         except Exception as e:
             logger.error(f"Erreur lors de l'envoi Telegram : {e}")
 
-    def reason(self, prompt: str) -> str:
-        """Utilise Groq pour raisonner."""
-        from groq import Groq
-        client = Groq(api_key=self.groq_api_key)
-        completion = client.chat.completions.create(
-            model="llama3-8b-8192",
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return completion.choices[0].message.content
+    def reason(self, prompt: str, provider: str = "groq") -> str:
+        """Utilise Groq ou Gemini pour raisonner."""
+        if provider == "groq":
+            from groq import Groq
+            client = Groq(api_key=self.groq_api_key)
+            completion = client.chat.completions.create(
+                model="llama3-8b-8192",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return completion.choices[0].message.content
+        elif provider == "gemini":
+            import google.generativeai as genai
+            genai.configure(api_key=self.gemini_api_key)
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(prompt)
+            return response.text
+
+    def hf_inference(self, model_id: str, inputs: Dict):
+        """Utilise Hugging Face Inference API."""
+        import requests
+        api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+        headers = {"Authorization": f"Bearer {self.hf_token}"}
+        response = requests.post(api_url, headers=headers, json=inputs)
+        return response.json()
+
+    def supabase_upsert(self, table: str, data: Dict):
+        """Sauvegarde des données dans Supabase."""
+        from supabase import create_client, Client
+        supabase: Client = create_client(self.supabase_url, self.supabase_key)
+        response = supabase.table(table).upsert(data).execute()
+        return response
 
     def execute_task(self, task: str):
         """Exécute une tâche spécifique."""
